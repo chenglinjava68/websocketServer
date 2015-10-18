@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Sprite Demonstration</title>
+<style type="text/css">
+#draw-target {
+	width: 480px;
+	height: 320px;
+	position: relative;
+	background-image: url(map.jpg);
+}
+</style>
+
+<script type="text/javascript" src="../../js/jquery-1.8.3.min.js"></script>
+
+<script type="text/javascript">
+$(document).ready(function() {
+	
+	// IE6 background image caching fix.
+	// Include this JavaScript a the top of your page.
+	try {
+	    document.execCommand("BackgroundImageCache", false, true);
+	} catch(err) {};
+	
+	//方便查询输出的log函数，这里可以根据你自己的实际情况，
+	//去选择使用浏览器的alert或者浏览器支持的console.log
+	function log(obj){
+		//alert(obj);
+		//console.info(obj);
+		//console.log(obj);
+		console.dir(obj);
+	}
+	
+	var time,
+		SYS_process,
+    	SYS_timeInfo,
+    	SYS_spriteParams = {
+	        width: 64,
+	        height: 64,
+	        imagesWidth: 256,
+	        images: 'default.png',
+	        direction: 'down',
+	        $drawTarget: $('#draw-target')
+	    },
+	    SYS_actors = [];
+
+	var timeInfo = function(goalFPS) {
+		var oldTime, paused = true, 
+			iterCount = 0, 
+			totalFPS = 0;
+		return {
+			getInfo : function() {
+				if (paused === true) {
+					paused = false;
+					oldTime = +new Date();
+					return {
+						elapsed : 0,
+						coeff : 0,
+						FPS : 0,
+						averageFPS : 0
+					};
+				}
+
+				var newTime = +new Date();
+				var elapsed = newTime - oldTime;
+					oldTime = newTime;
+				var FPS = 1000 / elapsed;
+				iterCount++;
+				totalFPS += FPS;
+				return {
+					elapsed : elapsed,
+					coeff : goalFPS / FPS,
+					FPS : FPS,
+					averageFPS : totalFPS / iterCount
+				};
+			},
+			pause : function() {
+				paused = true;
+			}
+		};
+	};
+
+	var DHTMLSprite = function(params) {
+		var width = params.width, 
+			height = params.height, 
+			imagesWidth = params.imagesWidth, 
+			$element = params.$drawTarget.append('<div/>').find(':last'), 
+			elemStyle = $element[0].style, 
+			mathFloor = Math.floor;
+		$element.css({
+			position : 'absolute',
+			width : width,
+			height : height,
+			backgroundImage : 'url(' + params.images + ')'
+		});
+		var that = {
+			draw : function(x, y) {
+				elemStyle.left = x + 'px';
+				elemStyle.top = y + 'px';
+			},
+			changeImage : function(index) {
+				index *= this.width;
+				var vOffset = -mathFloor(index / this.imagesWidth) * this.height;
+				var hOffset = -index % this.imagesWidth;
+				elemStyle.backgroundPosition = hOffset + 'px ' + vOffset + 'px';
+			},
+			show : function() {
+				elemStyle.display = 'block';
+			},
+			hide : function() {
+				elemStyle.display = 'none';
+			},
+			destroy : function() {
+				$element.remove();
+			},
+			changeUrlImg : function(width, height, img, imagesWidth) {
+				$element.css({
+					width : width,
+					height : height,
+					backgroundImage : 'url(' + img + ')'
+				});
+				this.imagesWidth = imagesWidth;
+				this.width = width;
+				this.height = height;
+			}
+		};
+		var img = params.images;
+		that.name = img.substring(0, img.indexOf('.'));
+		that.imagesWidth = params.imagesWidth;
+		that.width = params.width;
+		that.height = params.height;
+		return that;
+	};
+	
+	var keys = function() {
+		var keyMap = {
+			'37' : 'left',
+			'39' : 'right',
+			'13' : 'fire'
+		}, kInfo = {
+			'left' : 0,
+			'right' : 0,
+			'fire' : 0
+		}, key;
+		$(document).bind('keydown keyup', function(event) {
+			key = '' + event.which;
+			if (keyMap[key] !== undefined) {
+				kInfo[keyMap[key]] = event.type === 'keydown' ? 1 : 0;
+				//log(event.type+"-"+keys.fire);
+				SYS_actors[0].action();
+				SYS_actors[1].attacked();
+				//SYS_actors[1].action();
+				return false;
+			}
+		});
+		return kInfo;
+	}();
+	
+	var processor = function () {
+	    var processList = [],
+	        addedItems = [];
+	    return {
+	        add: function (process) {
+	            addedItems.push(process);
+	        },
+	        process: function () {
+	            var newProcessList = [],
+	            len = processList.length;
+	            for (var i = 0; i < len; i++) {
+	                if (!processList[i].removed) {
+	                    processList[i].move();
+	                    newProcessList.push(processList[i]);
+	                }
+	            }
+	            processList = newProcessList.concat(addedItems);
+	            addedItems = [];
+	        }
+	    };
+	};
+	
+	var removeAnim = function (x, y, imageList, timeout) {
+	    var imageIndex = 0,
+	        that = DHTMLSprite(SYS_spriteParams);
+	    setTimeout(function(){
+	        that.removed = true;
+	        that.destroy();
+	    }, timeout);
+	    that.move = function () {
+	        that.changeImage(imageList[imageIndex]);
+	        imageIndex++;
+	        if (imageIndex === imageList.length) {
+	            imageIndex = 0;
+	        }
+	        that.draw(x, y);
+	    };
+	    SYS_process.add(that);
+	};
+	
+	var actor = function(x, y, params){
+		var that = DHTMLSprite($.extend(SYS_spriteParams, params)),
+			animIndex = 0;
+		
+	    that.move = function () {
+	        if(that.isAction || that.isAttacked){
+	        	//animIndex += xDir > 0 ? 1 * tCoeff : -1 * tCoeff;
+	        	animIndex += 0.1 * SYS_timeInfo.coeff;
+				var animIndex2 = (animIndex % 4) >> 0;
+				animIndex2 += animIndex2 < 0 ? 4 : 0;
+				if (animIndex2 == 3) {
+					if(that.isAttacked){
+						that.changeUrlImg(64, 64, that.name+".png", 256);
+					}
+					that.isAction = false;
+					that.isAttacked = false;
+					animIndex = 0;
+					animIndex2 = 0;
+				}
+				that.changeImage(that.directionIndex()+animIndex2);
+	        }
+	        that.draw(x, y);
+	    };
+	    that.action = function() {
+	    	that.isAction = true;
+	    };
+	    that.attacked = function() {
+	    	that.changeUrlImg(48, 48, that.name+"_dead.png", 192);
+	    	that.isAttacked = true;
+	    };
+	    that.remove = function () {
+	    	removeAnim(x, y, [8], 250);
+	        that.destroy();
+	        that.removed = true;
+	    };
+	    that.getXY = function () {
+	        return {
+	            x: x,
+	            y: y
+	        };
+	    };
+	    that.changeDirection = function(direction){
+	    	that.changeImage(that.directionIndex());
+	    	that.direction = direction;
+	    };
+	    that.directionIndex = function(){
+	    	switch(that.direction){
+	    	case 'down':
+	    		return 0;
+	    	case 'left':
+	    		return 4;
+	    	case 'right':
+	    		return 8;
+	    	case 'up':
+	    		return 12;
+	    	}
+	    };
+	    
+	    that.direction = params.direction;
+	    that.isAction = false;
+	    that.changeDirection(that.direction);
+	    
+	    return that;
+	}
+
+	var Game = function(){
+		init = function () {
+			$("#draw-target").children().remove();
+			time = timeInfo(60);
+            SYS_process = processor();
+            initActors();
+        },
+        initActors = function(){
+        	var a1 = actor(128, 64, {images:'guanyu.png', direction:'right'});
+        	SYS_process.add(a1);
+        	SYS_actors.push(a1);
+        	var a2 = actor(256, 64, {images:'zhaoyun.png', direction:'left'});
+        	SYS_process.add(a2)
+        	SYS_actors.push(a2);
+        },
+		gameLoop = function () {
+        	SYS_timeInfo = time.getInfo();
+            SYS_process.process();
+            
+            $('#info1').text('FPS: ' + Math.floor(SYS_timeInfo.FPS));
+			$('#info2').text('Average FPS: ' + Math.floor(SYS_timeInfo.averageFPS));
+			$('#info3').text('Time Coefficient: ' + SYS_timeInfo.coeff.toFixed(2));
+            
+		    setTimeout(gameLoop, 15);
+		};
+		
+		init();
+		gameLoop();
+	}();
+	
+});
+</script>
+</head>
+<body>
+	<p>DHTML Demonstration. Lots of spites moved and animated with
+		time-adjustment. The speed of movement is adjusted so it looks like a
+		consistent 40 frames per second update across different browsers and
+		hardware. The actual frames per second achieved is shown below.</p>
+	<p>
+		<a href='/book'><<< Back</a>
+	</p>
+	<div id="draw-target"></div>
+	<p id="info1"></p>
+	<p id="info2"></p>
+	<p id="info3"></p>
+</body>
+</html>

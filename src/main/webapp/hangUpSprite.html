@@ -1,0 +1,598 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html>
+<head>
+<title>Hang Up Web Demo</title>
+<style type="text/css">
+#console-container {
+	float: left;
+	margin-left: 15px;
+	width: 600px;
+}
+
+#console {
+	border: 1px solid #CCCCCC;
+	border-right-color: #999999;
+	border-bottom-color: #999999;
+	height: 480px;
+	overflow-y: scroll;
+	padding-left: 5px;
+	padding-right: 5px;
+	width: 100%;
+}
+
+#console p {
+	padding: 0;
+	margin: 0;
+}
+
+#draw-target {
+	width: 480px;
+	height: 320px;
+	position: relative;
+	background-image: url(supercharged/sprites/map.jpg);
+}
+
+#panel-bg {
+	display: none;
+	position: absolute;
+	width: 500px;
+	height: 340px;
+	background: #000;
+	z-index: 2;
+	top: 0;
+	left: 0;
+	opacity: 0.7;
+}
+
+#panel-content {
+	display: none;
+	width: 300px;
+	height: 130px;
+	position: absolute;
+	margin-top: -140px;
+	background: #fff;
+	z-index: 3;
+	margin-left: 95px;
+	text-align: center;
+}
+</style>
+
+<script type="text/javascript" src="js/jquery-1.8.3.min.js"></script>
+<script type="application/javascript">
+	$(document).ready(function() {
+    
+		// 对Date的扩展，将 Date 转化为指定格式的String 
+		// 月(M)、日(d)、小时(h)、分(m)、秒(s)、季度(q) 可以用 1-2 个占位符， 
+		// 年(y)可以用 1-4 个占位符，毫秒(S)只能用 1 个占位符(是 1-3 位的数字) 
+		// 例子： 
+		// (new Date()).Format("yyyy-MM-dd hh:mm:ss.S") ==> 2006-07-02 08:09:04.423 
+		// (new Date()).Format("yyyy-M-d h:m:s.S")      ==> 2006-7-2 8:9:4.18 
+		Date.prototype.format = function(fmt) { //author: meizz 
+			var o = { 
+			  "M+" : this.getMonth()+1,                 //月份 
+			  "d+" : this.getDate(),                    //日 
+			  "h+" : this.getHours(),                   //小时 
+			  "m+" : this.getMinutes(),                 //分 
+			  "s+" : this.getSeconds(),                 //秒 
+			  "q+" : Math.floor((this.getMonth()+3)/3), //季度 
+			  "S"  : this.getMilliseconds()             //毫秒 
+			}; 
+			if(/(y+)/.test(fmt)) 
+				fmt=fmt.replace(RegExp.$1, (this.getFullYear()+"").substr(4 - RegExp.$1.length)); 
+			for(var k in o) 
+				if(new RegExp("("+ k +")").test(fmt)) 
+			fmt = fmt.replace(RegExp.$1, (RegExp.$1.length==1) ? (o[k]) : (("00"+ o[k]).substr((""+ o[k]).length))); 
+			return fmt; 
+		}
+
+		
+		// IE6 background image caching fix.
+		// Include this JavaScript a the top of your page.
+		try {
+		    document.execCommand("BackgroundImageCache", false, true);
+		} catch(err) {};
+		
+		//方便查询输出的log函数，这里可以根据你自己的实际情况，
+		//去选择使用浏览器的alert或者浏览器支持的console.log
+		function log(obj){
+			//alert(obj);
+			//console.info(obj);
+			//console.log(obj);
+			console.dir(obj);
+		}
+		
+		var time,
+			SYS_process,
+	    	SYS_timeInfo,
+	    	SYS_spriteParams = {
+		        width: 64,
+		        height: 64,
+		        imagesWidth: 256,
+		        images: 'supercharged/sprites/default.png',
+		        direction: 'down',
+		        $drawTarget: $('#draw-target')
+		    },
+		    SYS_attActors = [],
+		    SYS_defActors = [],
+		    SYS_fightPlayer = []
+			$queue = $("#queue"),
+			$click = $('#click'),
+			$countdown = $("#countdown"),
+			$attackerWin = $('#attackerWin');
+
+		var timeInfo = function(goalFPS) {
+			var oldTime, paused = true, 
+				iterCount = 0, 
+				totalFPS = 0;
+			return {
+				getInfo : function() {
+					if (paused === true) {
+						paused = false;
+						oldTime = +new Date();
+						return {
+							elapsed : 0,
+							coeff : 0,
+							FPS : 0,
+							averageFPS : 0
+						};
+					}
+
+					var newTime = +new Date();
+					var elapsed = newTime - oldTime;
+						oldTime = newTime;
+					var FPS = 1000 / elapsed;
+					iterCount++;
+					totalFPS += FPS;
+					return {
+						elapsed : elapsed,
+						coeff : goalFPS / FPS,
+						FPS : FPS,
+						averageFPS : totalFPS / iterCount
+					};
+				},
+				pause : function() {
+					paused = true;
+				}
+			};
+		};
+
+		var DHTMLSprite = function(params) {
+			var width = params.width, 
+				height = params.height, 
+				imagesWidth = params.imagesWidth, 
+				$element = params.$drawTarget.append('<div/>').find(':last'), 
+				elemStyle = $element[0].style, 
+				mathFloor = Math.floor;
+			$element.css({
+				position : 'absolute',
+				width : width,
+				height : height,
+				backgroundImage : 'url(' + params.images + ')'
+			});
+			var that = {
+				draw : function(x, y) {
+					elemStyle.left = x + 'px';
+					elemStyle.top = y + 'px';
+				},
+				changeImage : function(index) {
+					index *= this.width;
+					var vOffset = -mathFloor(index / this.imagesWidth) * this.height;
+					var hOffset = -index % this.imagesWidth;
+					elemStyle.backgroundPosition = hOffset + 'px ' + vOffset + 'px';
+				},
+				show : function() {
+					elemStyle.display = 'block';
+				},
+				hide : function() {
+					elemStyle.display = 'none';
+				},
+				destroy : function() {
+					$element.remove();
+				},
+				changeUrlImg : function(width, height, img, imagesWidth) {
+					$element.css({
+						width : width,
+						height : height,
+						backgroundImage : 'url(' + img + ')'
+					});
+					this.imagesWidth = imagesWidth;
+					this.width = width;
+					this.height = height;
+				}
+			};
+			var img = params.images;
+			that.name = img.substring(0, img.indexOf('.'));
+			that.imagesWidth = params.imagesWidth;
+			that.width = params.width;
+			that.height = params.height;
+			return that;
+		};
+		
+		var DHTMLInfo = function(x, y, params) {
+			var width = params.width, 
+				height = params.height, 
+				$element = params.$drawTarget.append('<\div>').find(':last'), 
+				elemStyle = $element[0].style;
+			$element.css({
+				position : 'absolute',
+				width : width,
+				height : height,
+				color : 'white'
+			});
+			var that = {
+				draw : function(x, y) {
+					elemStyle.left = x + 'px';
+					elemStyle.top = y + 'px';
+				},
+				show : function() {
+					elemStyle.display = 'block';
+				},
+				hide : function() {
+					elemStyle.display = 'none';
+				},
+				destroy : function() {
+					$element.remove();
+				},
+				move : function() {
+					if(that.text != ''){
+						that.draw(x, y);
+					}
+				},
+				setText : function(text) {
+					that.text = text;
+					$element.text(text);
+				}
+			};
+			that.imagesWidth = params.imagesWidth;
+			that.width = params.width;
+			that.height = params.height;
+			that.text = '';
+			that.show();
+			return that;
+		};
+		
+		var keys = function() {
+			var keyMap = {
+				'37' : 'left',
+				'39' : 'right',
+				'13' : 'fire'
+			}, kInfo = {
+				'left' : 0,
+				'right' : 0,
+				'fire' : 0
+			}, key;
+			$(document).bind('keydown keyup', function(event) {
+				key = '' + event.which;
+				if (keyMap[key] !== undefined) {
+					kInfo[keyMap[key]] = event.type === 'keydown' ? 1 : 0;
+					//log(event.type+"-"+keys.fire);
+					SYS_attActors[0].action();
+					SYS_defActors[0].attacked();
+					return false;
+				}
+			});
+			return kInfo;
+		}();
+		
+		var processor = function () {
+		    var processList = [],
+		        addedItems = [];
+		    return {
+		        add: function (process) {
+		            addedItems.push(process);
+		        },
+		        process: function () {
+		            var newProcessList = [],
+		            len = processList.length;
+		            for (var i = 0; i < len; i++) {
+		                if (!processList[i].removed) {
+		                    processList[i].move();
+		                    newProcessList.push(processList[i]);
+		                }
+		            }
+		            processList = newProcessList.concat(addedItems);
+		            addedItems = [];
+		        }
+		    };
+		};
+		
+		var removeAnim = function (x, y, imageList, timeout) {
+		    var imageIndex = 0,
+		        that = DHTMLSprite(SYS_spriteParams);
+		    setTimeout(function(){
+		        that.removed = true;
+		        that.destroy();
+		    }, timeout);
+		    that.move = function () {
+		        that.changeImage(imageList[imageIndex]);
+		        imageIndex++;
+		        if (imageIndex === imageList.length) {
+		            imageIndex = 0;
+		        }
+		        that.draw(x, y);
+		    };
+		    SYS_process.add(that);
+		};
+		
+		var actor = function(x, y, params){
+			var that = DHTMLSprite($.extend(SYS_spriteParams, params)),
+				animIndex = 0;
+			
+		    that.move = function() {
+		        if(that.isAction || that.isAttacked){
+		        	//animIndex += xDir > 0 ? 1 * tCoeff : -1 * tCoeff;
+		        	animIndex += 0.1 * SYS_timeInfo.coeff;
+					var animIndex2 = (animIndex % 4) >> 0;
+					animIndex2 += animIndex2 < 0 ? 4 : 0;
+					if (animIndex2 == 3) {
+						if(that.isAttacked){
+							that.changeUrlImg(64, 64, that.name+".png", 256);
+						}
+						that.isAction = false;
+						that.isAttacked = false;
+						animIndex = 0;
+						animIndex2 = 0;
+						that.descHp('');
+					}
+					that.changeImage(that.directionIndex()+animIndex2);
+		        }
+		        that.draw(x, y);
+		    };
+		    that.action = function() {
+		    	that.isAction = true;
+		    };
+		    that.attacked = function() {
+		    	that.changeUrlImg(48, 48, that.name+"_dead.png", 192);
+		    	that.isAttacked = true;
+		    };
+		    that.remove = function() {
+		    	removeAnim(x, y, [8], 250);
+		        that.destroy();
+		        that.removed = true;
+		    };
+		    that.getXY = function() {
+		        return {
+		            x: x,
+		            y: y
+		        };
+		    }
+		    that.descHp = function (descHp) {
+		    	that.hpInfo.setText(descHp);
+		    };
+		    that.changeDirection = function(direction){
+		    	that.changeImage(that.directionIndex());
+		    	that.direction = direction;
+		    };
+		    that.directionIndex = function(){
+		    	switch(that.direction){
+		    	case 'down':
+		    		return 0;
+		    	case 'left':
+		    		return 4;
+		    	case 'right':
+		    		return 8;
+		    	case 'up':
+		    		return 12;
+		    	}
+		    };
+		    
+		    that.direction = params.direction;
+		    that.isAction = false;
+		    that.changeDirection(that.direction);
+		    
+		    return that;
+		}
+
+		var Game = function(){
+	        connect = function(host) {
+	            if ('WebSocket' in window) {
+	            	socket = new WebSocket(host);
+	            } else if ('MozWebSocket' in window) {
+	            	socket = new MozWebSocket(host);
+	            } else {
+	            	Console.log('------------------------------------------------------------------------', true);
+	                Console.log('Error: WebSocket is not supported by this browser.', true);
+	                return;
+	            }
+
+	            socket.onopen = function () {
+	                // Socket open.. start the game loop.
+	                Console.log('Info: WebSocket connection opened.', true);
+	                Console.log('------------------------------------------------------------------------', true);
+	                // Console.log('Info: Press an arrow key to begin.');
+	                //Game.startGameLoop();
+	                setInterval(function() {
+	                    // Prevent server read timeout.
+	                    socket.send('ping');
+	                }, 5000);
+	            };
+
+	            socket.onclose = function () {
+	            	Console.log('------------------------------------------------------------------------', true);
+	                Console.log('Info: WebSocket closed.', true);
+	                //Game.stopGameLoop();
+	            };
+
+	            socket.onmessage = function (message) {
+	            	// _Potential_ security hole, consider using json lib to parse data in production.
+	                var jsonMsg = eval('(' + message.data + ')');
+	                switch (jsonMsg.type) {
+	                    case 'searching':
+	                    	setTimeout(function(){
+	                    		$click.click();
+	                    		$countdown.text(jsonMsg.countdown+1);
+	                    		countdown();
+	                    	}, 500);
+	                        break;
+	                    case 'beginFight':
+	                    	$('#panel-bg').click();
+	                    	break;
+	                    case 'fighting':
+	                    	gameFighting(jsonMsg.round);
+	                    	break;
+	                    case 'finishedFight':
+	                    	$attackerWin.text(jsonMsg.isAttackerWin?'胜利':'失败');
+	                    	setTimeout(function(){
+	                    		$click.click();
+	                    	}, 1500);
+	                    	break;
+               		}
+	            	Console.log((new Date).format("yyyy-MM-dd hh:mm:ss") + ":" + message.data);
+	            	if(message.data.indexOf('finishedFight') > 0){
+	            		Console.log('------------------------------------------------------------------------', true);
+	            	}
+	            };
+	        },
+	        init = function () {
+				$("#draw-target").children().remove();
+				time = timeInfo(60);
+	            SYS_process = processor();
+	            initActors();
+	            setInterval(function() {
+					$.dequeue($queue, 'fighting');
+				}, 1000);
+	            
+	            if (window.location.protocol == 'http:') {
+	                connect('ws://' + window.location.host + '/websocketServer/hangUp');
+	            } else {
+	                connect('wss://' + window.location.host + '/websocketServer/hangUp');
+	            }
+	        },
+	        initActors = function(){
+	        	var h1 = actor(2, 2, {images:'supercharged/sprites/zhangfei_head.png', width:64, height:80});
+	        	SYS_process.add(h1);
+	        	var h2 = actor(415, 2, {images:'supercharged/sprites/guanyu_head.png', width:64, height:80});
+	        	SYS_process.add(h2);
+	        	
+	        	var info1 = DHTMLInfo(190, 89, {width:30, height:15, $drawTarget:SYS_spriteParams.$drawTarget, text:151});
+	        	SYS_process.add(info1);
+	        	var a1 = actor(180, 114, {images:'supercharged/sprites/zhangfei.png', direction:'right', width:64, height:64});
+	        	a1.hpInfo = info1;
+	        	SYS_process.add(a1);
+	        	SYS_attActors.push(a1);
+	        	
+	        	var info2 = DHTMLInfo(245, 89, {width:30, height:15, $drawTarget:SYS_spriteParams.$drawTarget, text:122});
+	        	SYS_process.add(info2);
+	        	var a2 = actor(230, 114, {images:'supercharged/sprites/guanyu.png', direction:'left', width:64, height:64});
+	        	a2.hpInfo = info2;
+	        	SYS_process.add(a2)
+	        	SYS_defActors.push(a2);
+	        },
+			gameLoop = function () {
+	        	SYS_timeInfo = time.getInfo();
+	            SYS_process.process();
+	            
+	            $('#info1').text('FPS: ' + Math.floor(SYS_timeInfo.FPS));
+				$('#info2').text('Average FPS: ' + Math.floor(SYS_timeInfo.averageFPS));
+				$('#info3').text('Time Coefficient: ' + SYS_timeInfo.coeff.toFixed(2));
+	            
+			    setTimeout(gameLoop, 15);
+			},
+			gameFighting = function(round) {
+				for(var index in round){
+					var action = round[index];
+					var attName = action.attacker;
+					var defName = action.defencer;
+					var descHp = action.descHp;
+					var attUnit = attName.substring(0, 3);
+					var attIndex = attName.charAt(attName.length-1);
+					var defUnit = defName.substring(0, 3);
+					var defIndex = defName.charAt(defName.length-1);
+					$.queue($queue, 'fighting', function(attUnit, attIndex, defIndex, descHp){
+						return function(){
+							if(attUnit == 'att'){
+								SYS_attActors[attIndex].action();
+								setTimeout(function(){
+									SYS_defActors[defIndex].attacked();
+									SYS_defActors[defIndex].descHp(-descHp);
+								}, 400);
+								//SYS_defActors[defIndex].action();
+								//setTimeout(function(){SYS_attActors[attIndex].attacked();}, 400);
+								//log('att fight def '+descHp+' '+new Date());
+							}else if(attUnit == 'def'){
+								SYS_defActors[defIndex].action();
+								setTimeout(function(){
+									SYS_attActors[attIndex].attacked();
+									SYS_attActors[attIndex].descHp(-descHp);
+								}, 400);
+								//log('def fight att '+descHp+' '+new Date());
+							}
+						}
+					}(attUnit, attIndex, defIndex, descHp));
+				}
+			},
+			countdown = function(){
+				var timeout = $countdown.text();
+				timeout--;
+				$countdown.text(timeout);
+				if (timeout > 0) {
+					setTimeout(countdown, 1000);
+				}
+			};
+			
+			init();
+			gameLoop();
+		}();
+
+        var Console = {};
+        Console.log = (function(message, isSys) {
+            var console = document.getElementById('console');
+            var p = document.createElement('p');
+            if(isSys){
+            	p.style.color = 'red';
+            }
+            p.style.wordWrap = 'break-word';
+            p.innerHTML = message;
+            console.appendChild(p);
+            while (console.childNodes.length > 25) {
+                console.removeChild(console.firstChild);
+            }
+            console.scrollTop = console.scrollHeight;
+        });
+
+        // Remove elements with "noscript" class - <noscript> is not allowed in XHTML
+        var noscripts = document.getElementsByClassName("noscript");
+        for (var i = 0; i < noscripts.length; i++) {
+            noscripts[i].parentNode.removeChild(noscripts[i]);
+        }
+        
+        $click.click(function() {
+			$('#panel-bg').fadeIn(200);
+			$('#panel-content').fadeIn(400);
+		});
+
+		$('#panel-bg, #panel-content').click(function() {
+			$('#panel-bg').fadeOut(800);
+			$('#panel-content').fadeOut(800);
+		});
+		
+
+	});
+
+</script>
+</head>
+<body>
+	<div class="noscript">
+		<h2 style="color: #ff0000">Seems your browser doesn't support
+			Javascript! Websockets rely on Javascript being enabled. Please
+			enable Javascript and reload this page!</h2>
+	</div>
+	<div style="float: left">
+		<div id="draw-target"></div>
+		<div id="panel-bg"></div>
+		<div id="panel-content">
+			<h1>战斗<span id="attackerWin"></span></h1>
+			<h2>正在搜寻敌人...<span id="countdown"></span></h2>
+		</div>
+		<p id="info1"></p>
+		<p id="info2"></p>
+		<p id="info3"></p>
+	</div>
+	<div id="console-container">
+		<div id="console" />
+	</div>
+	<div id="queue"></div>
+	<div id="click" style="color: red"></div>
+</body>
+</html>

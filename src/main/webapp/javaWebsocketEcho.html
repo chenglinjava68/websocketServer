@@ -1,0 +1,80 @@
+<html>
+<head>
+<title>websocket echo client</title>
+<script type="text/javascript">
+//方便查询输出的log函数，这里可以根据你自己的实际情况，
+//去选择使用浏览器的alert或者浏览器支持的console.log
+function log(obj){
+	var p = document.createElement("p");
+	p.style.wordWrap = "break-word";
+	p.textContent = obj;
+	output.appendChild(p);
+	
+	//alert(obj);
+	//console.info(obj);
+	//console.log(obj);
+	console.dir(obj);
+}
+
+var ws;
+
+function init(){
+	//直接使用id为msg和output的也可以！？
+	//都不需要document.getElementById了
+	//log(msg);
+	//log(output);
+	//outputEle = document.getElementById("output");
+	//log(outputEle);
+	//log(output == outputEle);
+
+	output = document.getElementById("output");
+	msg = document.getElementById("msg");
+}
+
+function send_echo(){
+	var wsUri = "ws://localhost:8080/websocketServer/echo";
+	log("Connecting to "+wsUri);
+	//log(msg);
+	//log(msg.value);
+	ws = new WebSocket(wsUri);
+	ws.onopen = function(e){
+		log("Connected!");
+		sendMsg(msg.value);
+	}
+	ws.onmessage = function(e){
+		log("Received message:"+e.data);
+		ws.close();
+	}
+	ws.onerror = function(e){
+		log("ERROR!");
+		ws.close();
+	}
+}
+
+function sendMsg(msg){
+	if(ws.readyState != WebSocket.OPEN){
+		return;
+	}
+	ws.send(msg);
+	log("Message sent");
+}
+
+if(window.WebSocket){
+	console.log("Browser supports WebSocket!");
+	window.addEventListener("load", init, false);
+}else{
+	console.log("Browser not supports WebSocket...");
+}
+</script>
+</head>
+<body>
+<h1>Echo Servcer</h1>
+<div>
+	<form>
+		<input type="button" onclick="send_echo()" value="Pree to send">
+		<input type="text" id="msg" name="msg" value="Hello Web Socket">
+	</form>
+</div>
+<div id="output"></div>
+</body>
+</html>

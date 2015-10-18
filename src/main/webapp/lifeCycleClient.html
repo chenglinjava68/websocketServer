@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=UTF-8>
+<title>LifeCycle</title>
+<script>
+	function init() {
+		wc = null;
+	    output = document.getElementById("output");
+	    trafficLightDisplay = document.getElementById("traffic_light_display");
+	    updateDisplay("1", "No connection");
+	    updateButton();
+	}
+	
+	function open_connection(){
+		wc = new WebSocket("ws://localhost:8080/websocketServer/lightByCode");
+		wc.onmessage = function(e){
+			updateMsg(e.data);
+			updateButton();
+		}
+		wc.onclose = function(e){
+			updateButton();
+		}
+	}
+	
+	function updateMsg(msg) {
+        var display_message = getDisplayMsg(msg);
+        var light_index = getLightIndex(msg);
+        updateDisplay(light_index, display_message);
+    }
+	
+	function getDisplayMsg(msg){
+		return msg.substring(2, msg.length);
+	}
+	
+	function getLightIndex(msg){
+		return msg.substring(0, 1);
+	}
+	
+	function updateDisplay(lightIndex, displayMsg){
+		var old = trafficLightDisplay.firstChild;
+		var pre = document.createElement("pre");
+		pre.style.wordWrap = "break-word";
+		pre.innerHTML = "<b><font face='Arial'>"+displayMsg+"</font></b>";
+		if(old){
+			trafficLightDisplay.replaceChild(pre, old);
+		}else{
+			trafficLightDisplay.appendChild(pre);
+		}
+		
+		var context = document.getElementById("myDrawing").getContext("2d");
+		context.beginPath();
+		context.fillStyle = "black";
+		context.fillRect(65, 0, 70, 210);
+		context.fill();
+		
+		context.beginPath();
+		context.fillStyle = getColor(1, lightIndex);
+		context.arc(100, 35, 25, 0, 2*Math.PI, false);
+		context.fill();
+		
+		context.beginPath();
+		context.fillStyle = getColor(2, lightIndex);
+		context.arc(100, 105, 25, 0, 2*Math.PI, false);
+		context.fill();
+		
+		context.beginPath();
+		context.fillStyle = getColor(3, lightIndex);
+		context.arc(100, 175, 25, 0, 2*Math.PI, false);
+		context.fill();
+	}
+	
+	function getColor(lightIndex, lightOnIndex){
+		if(lightIndex != lightOnIndex){
+			return "grey";
+		}
+		
+		if(lightIndex == 1){
+			return "red";
+		}else if(lightIndex == 2){
+			return "yellow";
+		}else if(lightIndex == 3){
+			return "green";
+		}else{
+			return "grey";
+		}
+	}
+	
+    function updateButton() {
+        ocID.disabled = isOpen();
+        simID.disabled = !isOpen();
+        svmID.disabled = !isOpen();
+        rccID.disabled = !isOpen();
+        rcID.disabled = !isOpen();
+    }
+    
+    function isOpen() {
+        return wc && wc.readyState == WebSocket.OPEN;
+    }
+    
+    function send_valid_message() {
+        wc.send("Hello")  
+    }
+    
+    function send_invalid_message() {
+        wc.send("Helxxxlo")
+        
+    }
+    
+    function request_close_connection() {
+        wc.send("close");
+    }
+    
+    function close_connection() {
+        wc.close();
+        updateDisplay("1", "Client closed connection");
+    }
+
+    window.addEventListener("load", init, false);
+</script>
+</head>
+<body>
+	<h1 style="text-align: center;">LifeCycle Lights</h1>
+
+        <table style="text-align:left; width:800px; margin-left:auto; margin-right:auto;">
+            <tbody>
+            <tr>
+                <td style=" text-align: center; vertical-align: top;">
+                    <div style="text-align: center;">
+                        <button onclick="open_connection()" id="ocID">Open Connection</button>
+                        <button onclick="send_valid_message()" id="svmID">Send Message</button>
+                        <button onclick="send_invalid_message()" id="simID">Send Bad Message</button>
+                        <button onclick="request_close_connection()" id="rccID">Server Close Connection</button>
+                        <button onclick="close_connection()" id="rcID">Client Close Connection</button>
+                	</div>
+                </td>
+            </tr>    
+            <tr>
+                <td style=" text-align: center; vertical-align: top;padding-top: 20px;">
+                    <canvas id="myDrawing" width="200" height="210"></canvas>
+                    <div id="traffic_light_display"></div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <div id="output"></div>
+</body>
+</html>
