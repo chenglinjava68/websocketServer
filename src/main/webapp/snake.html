@@ -80,6 +80,8 @@
             for (var id in this.snakeBody) {
                 context.fillStyle = this.color;
                 context.fillRect(this.snakeBody[id].x, this.snakeBody[id].y, Game.gridSize, Game.gridSize);
+                
+                //在贪吃蛇的头部标记一下这是第几只蛇
                 if(id == 0){
                 	textX = this.snakeBody[id].x;
                 	textY = this.snakeBody[id].y;
@@ -131,9 +133,9 @@
         };
 
         Game.startGameLoop = function() {
-            if (window.webkitRequestAnimationFrame) {
+            if (window.requestAnimationFrame) {
                 Game.nextFrame = function () {
-                    webkitRequestAnimationFrame(Game.run);
+                	requestAnimationFrame(Game.run);
                 };
             } else if (window.mozRequestAnimationFrame) {
                 Game.nextFrame = function () {
@@ -224,6 +226,7 @@
                 switch (packet.type) {
                     case 'update':
                         for (var i = 0; i < packet.data.length; i++) {
+                        	//console.log(packet.data[i].id, packet.data[i].body);
                             Game.updateSnake(packet.data[i].id, packet.data[i].body);
                         }
                         break;
