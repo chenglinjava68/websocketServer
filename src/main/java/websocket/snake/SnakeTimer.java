@@ -37,14 +37,14 @@ public class SnakeTimer {
     private static final ConcurrentHashMap<Integer, Snake> snakes =  new ConcurrentHashMap<Integer, Snake>();
     private static Timer gameTimer = null;
 
-    protected static synchronized void addSnake(Snake snake) {
+    protected static void addSnake(Snake snake) {
         if (snakes.size() == 0) {
             startTimer();
         }
         snakes.put(Integer.valueOf(snake.getId()), snake);
     }
 
-    protected static synchronized void removeSnake(Snake snake) {
+    protected static void removeSnake(Snake snake) {
         snakes.remove(Integer.valueOf(snake.getId()));
         if (snakes.size() == 0) {
             stopTimer();
